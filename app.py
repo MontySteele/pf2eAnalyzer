@@ -382,6 +382,25 @@ def check_missing_feat_slots(character: CharacterSheet) -> List[str]:
 
     return suggestions
 
+def check_constitution_score(character: CharacterSheet) -> List[str]:
+    suggestions = []
+    score = character.build.abilities.con_score
+
+    if score < 10:
+        suggestions.append(
+            f"Critically Low Constitution (CON): Your CON score of {score} is very low. "
+            f"This will result in dangerously low Hit Points, making you highly susceptible "
+            f"to being knocked out or killed. Consider increasing this score as a high priority."
+        )
+    elif score < 12: # This means score is 10 or 11
+        suggestions.append(
+            f"Low Constitution (CON): Your CON score of {score} is a bit low. "
+            f"This can lead to lower than average Hit Points, impacting your survivability. "
+            f"Consider if this is a conscious choice for your character build."
+        )
+    # No suggestion if score is 12 or higher
+    return suggestions
+
 # --- UPDATED AoN Link Function ---
 def get_aon_link(item_name: str, item_type: Optional[str] = None) -> str:
     """Generates a search link to Archives of Nethys for a given item name."""
@@ -650,7 +669,8 @@ def analyze_character_sheet(char_file_bytes: bytes, char_data_dict: dict, google
     all_suggestions = [] # ... (your audit checks) ...
     all_suggestions.extend(check_unspent_gold(sheet))
     all_suggestions.extend(check_equipment_runes(sheet))
-    all_suggestions.extend(check_missing_feat_slots(sheet)) 
+    all_suggestions.extend(check_missing_feat_slots(sheet))
+    all_suggestions.extend(check_constitution_score(sheet))
 
     combat_ideas = []
     if google_api_key: 
