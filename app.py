@@ -382,6 +382,63 @@ def check_missing_feat_slots(character: CharacterSheet) -> List[str]:
 
     return suggestions
 
+def check_key_ability_score(character: CharacterSheet) -> List[str]:
+    """
+    Checks if the character's key ability score is among their top two highest ability scores.
+    """
+    suggestions = []
+    build = character.build
+    abilities = build.abilities
+
+    key_ability_str = build.keyability.lower() # e.g., "str", "dex"
+    
+    ability_scores_dict = {
+        "str": abilities.str_score,
+        "dex": abilities.dex_score,
+        "con": abilities.con_score,
+        "int": abilities.int_score,
+        "wis": abilities.wis_score,
+        "cha": abilities.cha_score,
+    }
+
+    key_ability_score = ability_scores_dict.get(key_ability_str)
+
+    if key_ability_score is None:
+        # This case should ideally not happen if Pathbuilder data is consistent
+        suggestions.append(f"Could not determine the score for the key ability '{build.keyability}'.")
+        return suggestions
+
+    all_scores = sorted(list(ability_scores_dict.values()), reverse=True)
+
+    highest_score = all_scores[0] if len(all_scores) > 0 else None
+    second_highest_score = all_scores[1] if len(all_scores) > 1 else None
+
+    # Check if key ability score is among the top two
+    # It passes if it's equal to the highest, or equal to the second highest.
+    # This inherently handles ties for the highest position.
+    # If there's only one score, it's the highest.
+    
+    passes_check = False
+    if highest_score is not None and key_ability_score >= highest_score: # Handles tie for highest
+        passes_check = True
+    elif second_highest_score is not None and key_ability_score >= second_highest_score: # Handles tie for second highest
+        passes_check = True
+    elif highest_score is not None and second_highest_score is None and key_ability_score == highest_score: # Only one ability score in list
+        passes_check = True
+
+
+    if not passes_check:
+        top_two_scores_str = f"{highest_score}"
+        if second_highest_score is not None:
+            top_two_scores_str += f", {second_highest_score}"
+        
+        suggestions.append(
+            f"Key ability {build.keyability.upper()} (score {key_ability_score}) is not among the "
+            f"top two highest ability scores ({top_two_scores_str}). "
+            f"Consider if this alignment supports the character's focus."
+        )
+    return suggestions
+
 # --- UPDATED AoN Link Function ---
 def get_aon_link(item_name: str, item_type: Optional[str] = None) -> str:
     """Generates a search link to Archives of Nethys for a given item name."""
@@ -650,7 +707,8 @@ def analyze_character_sheet(char_file_bytes: bytes, char_data_dict: dict, google
     all_suggestions = [] # ... (your audit checks) ...
     all_suggestions.extend(check_unspent_gold(sheet))
     all_suggestions.extend(check_equipment_runes(sheet))
-    all_suggestions.extend(check_missing_feat_slots(sheet)) 
+    all_suggestions.extend(check_missing_feat_slots(sheet))
+    all_suggestions.extend(check_key_ability_score(sheet)) # NEW CHECK ADDED
 
     combat_ideas = []
     if google_api_key: 
