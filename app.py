@@ -58,6 +58,18 @@ class Armor(BaseModel):
     worn: bool
     runes: List[str] = Field(default_factory=list) # Property runes
 
+class GenericItem(BasePydanticModel):
+    name: str
+    qty: int
+    invested: Optional[bool] = False
+    value: Optional[str] = None # e.g., "10 gp", "5 sp"
+    bulk: Optional[str] = None  # e.g., "L", "1", "2"
+    location: Optional[str] = None # Where the item is equipped or stored
+    id: Optional[str] = None # Pathbuilder item ID
+    img: Optional[str] = None # Image link for the item
+    data: Optional[Dict[str, Any]] = None # For any other specific data
+    type: Optional[str] = None # e.g. "item", "armor", "weapon"
+
 # To handle the list-based feat structure:
 class ProcessedFeat(BaseModel):
     name: Optional[str]
@@ -131,7 +143,7 @@ class Build(BaseModel): # Add this to your existing Build model
     feats_raw: List[List[Any]] = Field(alias='feats')
     processed_feats: List[ProcessedFeat] = Field(default_factory=list)
     specials: List[str]
-    equipment: List[Any]
+    equipment: List[GenericItem] = Field(default_factory=list)
     weapons: List[Weapon] = Field(default_factory=list)
     money: Money
     armor: List[Armor] = Field(default_factory=list)
@@ -140,6 +152,98 @@ class Build(BaseModel): # Add this to your existing Build model
     focus: Optional[FocusDetails] = None # Add the new FocusDetails model here
     free_archetype_active: bool = False # NEW FIELD
     # acTotal: Dict[str, Any] # Can add if needed for AC checks
+
+    @validator('equipment', pre=True, always=True)
+    def transform_equipment_list(cls, v):
+        if not v: # Handles None or empty list
+            return [] 
+        if not isinstance(v, list):
+            # Optionally, log a warning or raise ValueError if the type is unexpected.
+            # For now, returning an empty list to prevent downstream errors.
+            print(f"Warning: Expected a list for equipment, got {type(v)}. Returning empty list.")
+            return []
+
+        processed_list = []
+        for item_data in v:
+            if isinstance(item_data, list):
+                name: Optional[str] = None
+                qty: Optional[int] = None
+                location: Optional[str] = None
+                invested: bool = False # Default to False
+
+                if not item_data: # Skip empty lists
+                    continue
+
+                name = str(item_data[0]) # Name is always first
+
+                if len(item_data) == 3:
+                    # Format: [name, qty, invested_str_or_container_id]
+                    # Pathbuilder seems to sometimes put container_id here if not invested.
+                    # For this case, we assume item_data[2] is primarily for 'invested' status.
+                    try:
+                        qty = int(item_data[1])
+                    except (ValueError, TypeError):
+                        print(f"Warning: Could not parse qty '{item_data[1]}' for item '{name}'. Skipping item.")
+                        continue 
+                    
+                    # Check if the third element is "Invested"
+                    # If not, it could be a location or just some other non-invested string.
+                    # Based on examples, "Invested" is key.
+                    # If it's not "Invested", we assume not invested and no specific location from this element.
+                    if isinstance(item_data[2], str) and item_data[2].lower() == "invested":
+                        invested = True
+                    # If item_data[2] is a container_id (looks like a UUID or similar), 
+                    # it's not "Invested", so invested remains False. Location is not set here.
+
+                elif len(item_data) == 4:
+                    # Format: [name, qty, container_id_str, invested_str]
+                    try:
+                        qty = int(item_data[1])
+                    except (ValueError, TypeError):
+                        print(f"Warning: Could not parse qty '{item_data[1]}' for item '{name}'. Skipping item.")
+                        continue
+                    
+                    # Third element is location if it's a string and doesn't look like "Invested"
+                    if isinstance(item_data[2], str) and item_data[2].lower() != "invested":
+                        location = str(item_data[2])
+                    
+                    # Fourth element is for invested status
+                    if isinstance(item_data[3], str) and item_data[3].lower() == "invested":
+                        invested = True
+                    
+                elif len(item_data) == 2: # Example: ["Dagger", 1]
+                    try:
+                        qty = int(item_data[1])
+                    except (ValueError, TypeError):
+                        print(f"Warning: Could not parse qty '{item_data[1]}' for item '{name}'. Skipping item.")
+                        continue
+                    # invested remains False, location remains None
+                
+                else:
+                    # Invalid format for list item, skip or log
+                    print(f"Warning: Unexpected item_data format for '{name}': {item_data}. Skipping item.")
+                    continue
+
+                if name is not None and qty is not None:
+                    processed_list.append({
+                        "name": name,
+                        "qty": qty,
+                        "invested": invested,
+                        "location": location
+                        # Other GenericItem fields (value, bulk, id, img, data, type)
+                        # will default to None or their Pydantic defaults.
+                    })
+            elif isinstance(item_data, dict):
+                # If some items are already dicts, assume they are correctly structured for GenericItem
+                # or will be handled by GenericItem's own parsing.
+                # For robustness, ensure 'name' and 'qty' are present if possible, or let GenericItem validate.
+                processed_list.append(item_data)
+            else:
+                # Unknown item format, skip or log
+                print(f"Warning: Unknown equipment item format: {item_data}. Skipping item.")
+                continue
+        
+        return processed_list
 
     @validator('processed_feats', pre=False, always=True)
     def process_the_feats(cls, v, values):
