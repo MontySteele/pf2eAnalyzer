@@ -382,6 +382,31 @@ def check_missing_feat_slots(character: CharacterSheet) -> List[str]:
 
     return suggestions
 
+def check_basic_consumables(character: CharacterSheet) -> List[str]:
+    """
+    Checks if a character above level 1 has any healing potions.
+    """
+    suggestions = []
+    level = character.build.level
+    equipment = character.build.equipment
+
+    if level <= 1:
+        return suggestions # No suggestion for level 1 characters
+
+    has_healing_potion = False
+    for item in equipment:
+        if isinstance(item, dict) and "name" in item:
+            item_name = item.get("name", "")
+            if isinstance(item_name, str) and "healing potion" in item_name.lower():
+                has_healing_potion = True
+                break # Found one, no need to check further
+
+    if not has_healing_potion:
+        suggestions.append(
+            "Character is above level 1 and has no healing potions. Consider acquiring some for survivability."
+        )
+    return suggestions
+
 # --- UPDATED AoN Link Function ---
 def get_aon_link(item_name: str, item_type: Optional[str] = None) -> str:
     """Generates a search link to Archives of Nethys for a given item name."""
@@ -650,7 +675,8 @@ def analyze_character_sheet(char_file_bytes: bytes, char_data_dict: dict, google
     all_suggestions = [] # ... (your audit checks) ...
     all_suggestions.extend(check_unspent_gold(sheet))
     all_suggestions.extend(check_equipment_runes(sheet))
-    all_suggestions.extend(check_missing_feat_slots(sheet)) 
+    all_suggestions.extend(check_missing_feat_slots(sheet))
+    all_suggestions.extend(check_basic_consumables(sheet))
 
     combat_ideas = []
     if google_api_key: 
@@ -866,4 +892,4 @@ else:
         st.info("Awaiting JSON file upload to begin analysis.")
 
 st.markdown("---")
-st.markdown("Pathfinder 2e Character Auditor | Version 0.6 (AoN Links, Cache, Spell Prompts, UI Polish) | LLM features are experimental.")
+st.markdown("Pathfinder 2e Character Auditor | Version 0.7 (Basic Consumables Check) | LLM features are experimental.")
